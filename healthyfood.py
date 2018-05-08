@@ -10,6 +10,7 @@ import re #regular expressions
 from pymongo import MongoClient
 from prettytable import PrettyTable
 
+
 #scrapes the names of restaurants on fastfoodnutrition.org 
 def restaurant_name_scraping(healthyfood):  
     url = 'https://fastfoodnutrition.org/'
@@ -35,7 +36,7 @@ def restaurant_name_scraping(healthyfood):
                               "webname":"panera-bread"})    
 
 #scrapes the menu for each restaurant
-def menu_scraping(rest_name,food):
+def menu_scraping(rest_name,food_info):
     for restaurant in rest_name.find():
         r_name = restaurant['name']
         url = 'https://fastfoodnutrition.org/'+restaurant['webname']
@@ -66,29 +67,46 @@ def menu_scraping(rest_name,food):
                         page_cal = urlopen(req)
                         soup_cal = bs4.BeautifulSoup(page_cal, "html.parser")
                         calories = soup_cal.find_all("td", {"title": re.compile('Calories in')})
+                        total_fat = soup_cal.find_all("td", {"title": re.compile('Amount of fat')})
+                        sodium = soup_cal.find_all("td", {"title": re.compile('Amount of sodium')})
+                        total_carb = soup_cal.find_all("td", {"title": re.compile('Amount of carbohydrates')})
+                        protein = soup_cal.find_all("td", {"title": re.compile('Amount of protein')})
+                        fat_calories = soup_cal.find_all("td", {"title": re.compile('Calories from fat')})
                         try:
                             calories = float(calories[0].text)
+                            total_fat = float(re.search('\d+',(total_fat[0].text)).group(0))
+                            sodium = float(re.search('\d+',(sodium[0].text)).group(0))
+                            total_carb = float(re.search('\d+',(total_carb[0].text)).group(0))
+                            protein = float(re.search('\d+',(protein[0].text)).group(0))
+                            fat_calories = float(fat_calories[0].text)
                     
                     #entering food information into Mongodb
                             post = {"name":r_name,
                                     "webname":restaurant['webname'],
                                     "category":category,
                                     "menu_item":menu_item,
-                                    "calories":calories}
-                            food.insert_one(post)  
+                                    "calories":calories,
+                                    "total_fat":total_fat,
+                                    "sodium":sodium,
+                                    "total_carb":total_carb,
+                                    "protein":protein,
+                                    "fat_calories":fat_calories}
+                            food_info.insert_one(post)  
                         except IndexError:
                             continue
                         except ValueError:
+                            continue
+                        except AttributeError:
                             continue
                     except UnicodeEncodeError:
                         continue
                     
 #prints table of food from restaurants
-def print_food(food):
-    table = PrettyTable(["Restaurant Name", "webname", "Category", "Menu Item", "Calories"]) 
+def print_food(food_info):
+    table = PrettyTable(["Restaurant Name","Category", "Menu Item", "Calories","Cal from fat","Total fat", "Sodium","Total Carb","Protein"]) 
 
-    for item in food.find():
-        table.add_row([item['name'],item['webname'],item['category'],item['menu_item'],item['calories']])
+    for item in food_info.find():
+        table.add_row([item['name'],item['category'],item['menu_item'],item['calories'],item['fat_calories'],item['total_fat'],item['sodium'],item['total_carb'],item['protein']])
     print(table)
             
 
@@ -96,9 +114,9 @@ MONGO_URI = "mongodb://test:test@ds139929.mlab.com:39929/healthyfooddb"
 client = MongoClient(MONGO_URI, connectTimeoutMS = 30000) 
 db = client.get_database()
 rest_name = db.rest_name
-food = db.food
+food_info = db.food_info
 
-if food.count()==0:
+if food_info.count()==0:
     restaurant_name_scraping(rest_name) 
-    menu_scraping(rest_name, food)
-print_food(food)
+    menu_scraping(rest_name, food_info)
+print_food(food_info)
